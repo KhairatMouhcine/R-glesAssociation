@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Algorithme Apriori — Treillis complet des itemsets</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0b1020;
+      --card:#121a33;
+      --ink:#e9eefc;
+      --muted:#9fb0ff;
+      --accent:#6ae3ff;
+      --node:#1f2a52;
+      --nodeStroke:#7aa2ff;
+      --edge:#6b7bb780;
+      --edgeHover:#a8c1ff;
+      --lvl0:#ffd166;
+      --lvl1:#06d6a0;
+      --lvl2:#118ab2;
+      --lvl3:#073b4c;
+      --lvl4:#90e0ef;
+      --lvl5:#48cae4;
+      --lvl6:#0077b6;
+    }
+
+.edge.selected {
+  stroke: #ff9f1c;
+  stroke-width: 2.5;
+}
+.node.selected circle {
+  stroke: #ffb703; /* nœud sélectionné */
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 6px #ffb703aa);
+}
+
+.node.parent circle {
+  stroke: #2196f3; /* bleu pour parents */
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 5px #2196f3aa);
+}
+
+.node.child circle {
+  stroke: #00e676; /* vert pour enfants */
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 5px #00e676aa);
+}
+
+.edge.parent-edge {
+  stroke: #2196f3;
+  stroke-width: 2.2;
+}
+
+.edge.child-edge {
+  stroke: #00e676;
+  stroke-width: 2.2;
+}
+    *{box-sizing:border-box}
+    body{
+      margin:0; background:linear-gradient(180deg,#0b1020 0%,#0b1228 60%,#0b122e 100%);
+      color:var(--ink); font:15px/1.45 system-ui,Segoe UI,Roboto,Arial;
+    }
+    header{
+      padding:18px 22px; position:sticky; top:0; z-index:2; backdrop-filter: blur(6px);
+      background:linear-gradient(180deg,#0b1020bb,#0b102000);
+      border-bottom:1px solid #223; 
+    }
+    h1{margin:0 0 8px;font-weight:700;font-size:20px}
+    .wrap{
+      display:grid; grid-template-columns: 360px 1fr; gap:16px; padding:18px 18px 22px;
+    }
+    .panel{
+      background:var(--card); border:1px solid #22345a; border-radius:14px; padding:14px;
+      box-shadow: 0 6px 26px #00000055, inset 0 1px 0 #ffffff10;
+    }
+    .panel h2{margin:0 0 10px;font-size:16px;color:#cfe1ff}
+    textarea{
+      width:100%; min-height:160px; border-radius:10px; border:1px solid #31406d;
+      background:#0f1735; color:var(--ink); padding:10px; resize:vertical; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .row{display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap}
+    button{
+      appearance:none; border:none; background:linear-gradient(180deg,#2a3a74,#203060);
+      color:#eaf2ff; padding:10px 14px; border-radius:12px; font-weight:600; cursor:pointer;
+      box-shadow: 0 6px 18px #0008, inset 0 1px 0 #ffffff1a;
+    }
+    button:hover{filter:brightness(1.08)}
+    .hint{color:#9fb0ff; font-size:13px; margin-top:8px}
+    .tags{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+    .tag{
+      background:#0f1735; border:1px solid #334777; color:#cfe1ff;
+      border-radius:999px; padding:6px 10px; font:12px ui-monospace, monospace;
+    }
+    /* SVG area */
+    .stage{
+      position:relative; overflow:hidden; background:
+        radial-gradient(1200px 600px at 50% -20%, #1a235a22, transparent 70%),
+        radial-gradient(800px 400px at -10% 110%, #1a235a22, transparent 70%),
+        radial-gradient(800px 400px at 110% 110%, #1a235a22, transparent 70%);
+      border:1px solid #22345a; border-radius:14px; min-height:520px;
+    }
+    svg{width:100%; height:900px; display:block}
+    .edge{stroke:var(--edge); stroke-width:1.5; fill:none}
+    .edge.hover{stroke:var(--edgeHover); stroke-width:2}
+    .node{cursor:pointer; transition: transform .1s ease;}
+    .node circle{
+      fill:var(--node); stroke:var(--nodeStroke); stroke-width:1.5;
+      filter: drop-shadow(0 2px 2px #0006);
+    }
+    .node text{
+  fill:#eaf2ff;
+  font-size:15px;
+  font-weight:600;
+  font-family:ui-monospace, monospace;
+  dominant-baseline:middle;
+  text-anchor:middle;
+  pointer-events:none; /* empêche le texte de bloquer le survol */
+}
+    .lvl-0 circle{fill:var(--lvl0)}
+    .lvl-1 circle{fill:var(--lvl1)}
+    .lvl-2 circle{fill:var(--lvl2)}
+    .lvl-3 circle{fill:var(--lvl3)}
+    .lvl-4 circle{fill:var(--lvl4)}
+    .lvl-5 circle{fill:var(--lvl5)}
+    .lvl-6 circle{fill:var(--lvl6)}
+    .legend{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+    .legend .sw{width:12px;height:12px;border-radius:50%}
+    .legend .it{display:flex;align-items:center;gap:6px;font-size:12px;color:#cfe1ff}
+    .sep{height:1px;background:#22345a;margin:10px 0}
+    .small{font-size:12px;color:#b9c7ff}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Algorithme Apriori — Treillis complet des itemsets</h1>
+    <div class="small">Étape 1/2 : arbre complet (zoomable). Étape 2 : min_support et niveaux L<sub>k</sub>/C<sub>k</sub>.</div>
+  </header>
+
+  <div class="wrap">
+    <section class="panel">
+      <h2>Dataset (base D)</h2>
+      <textarea id="dataset" spellcheck="false">100: 1 3 4
+200: 2 3 5
+300: 1 2 3 5
+400: 2 5</textarea>
+
+      <div class="row">
+        <button id="btnBuild">Générer l’arbre</button>
+        <button id="btnSample">Exemple 1..5</button>
+      </div>
+
+      <div class="hint">Format : <code>TID: items séparés par des espaces</code>.</div>
+
+      <div class="sep"></div>
+      <h2>Items détectés</h2>
+      <div id="items" class="tags"></div>
+
+      <div class="sep"></div>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <section class="panel stage">
+      <svg id="svg" viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid meet"></svg>
+    </section>
+  </div>
+
+
+  
+
+<script>
+  const uniq = arr => [...new Set(arr)];
+  const byNum = (a,b)=>a-b;
+  function parseDataset(text){
+    const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    const transactions = [];
+    for(const line of lines){
+      const m = line.match(/^\s*([^:]+)\s*:\s*(.+)$/);
+      if(!m) continue;
+      const tid = m[1].trim();
+      const items = m[2].trim().split(/\s+/).map(Number).filter(n=>!Number.isNaN(n));
+      transactions.push({tid, items: uniq(items).sort(byNum)});
+    }
+    const all = uniq(transactions.flatMap(t=>t.items)).sort(byNum);
+    return {transactions, items: all};
+  }
+
+  function combinations(items){
+    const res = [[]];
+    for(const x of items){
+      const copy = res.map(s => s.concat(x));
+      res.push(...copy);
+    }
+    return res.sort((a,b)=> a.length-b.length || a.join(',').localeCompare(b.join(',')));
+  }
+
+  function key(arr){ return arr.join('-'); }
+  function label(arr){ return arr.length?`{${arr.join(' ')}}`:'∅'; }
+
+  let adjacency = new Map();
+
+  function edgesFromSets(sets) {
+    const edges = [];
+    adjacency = new Map();
+    for (const s of sets) {
+      adjacency.set(key(s), { parents: new Set(), children: new Set(), set:s });
+    }
+    for (const s of sets) {
+      for (const t of sets) {
+        if (t.length === s.length + 1) {
+          const isSubset = s.every(e => t.includes(e));
+          if (isSubset) {
+            edges.push([key(s), key(t)]);
+            adjacency.get(key(s)).children.add(key(t));
+            adjacency.get(key(t)).parents.add(key(s));
+          }
+        }
+      }
+    }
+    return edges;
+  }
+
+  function layoutSets(sets, width=1400, height=900, top=60, bottom=40){
+    const byLevel = new Map();
+    let maxLevel = 0;
+    for(const s of sets){
+      const k = s.length;
+      maxLevel = Math.max(maxLevel, k);
+      if(!byLevel.has(k)) byLevel.set(k, []);
+      byLevel.get(k).push(s);
+    }
+    const innerH = height - top - bottom;
+    const stepY = (innerH / (maxLevel||1)) * 1.3;
+    const pos = new Map();
+    for(let k=0;k<=maxLevel;k++){
+      const row = byLevel.get(k) || [];
+      const n = row.length || 1;
+      const stepX = width / (n+1);
+      row.forEach((set, i)=>{
+        const x = stepX*(i+1);
+        const y = top + (maxLevel? k*stepY : innerH/2);
+        pos.set(key(set), {x,y, level:k, set});
+      });
+    }
+    return {pos, maxLevel};
+  }
+
+  const svg = document.getElementById('svg');
+  function clearSVG(){ while(svg.firstChild) svg.removeChild(svg.firstChild); }
+
+  function renderLattice(sets){
+    clearSVG();
+    const width = 1400, height = 900;
+    const {pos, maxLevel} = layoutSets(sets, width, height);
+    const edges = edgesFromSets(sets);
+
+    // edges
+    for(const [fromK,toK] of edges){
+      const a = pos.get(fromK), b = pos.get(toK);
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', a.x);
+      line.setAttribute('y1', a.y);
+      line.setAttribute('x2', b.x);
+      line.setAttribute('y2', b.y);
+      line.setAttribute('data-from', fromK);
+      line.setAttribute('data-to', toK);
+      line.setAttribute('class','edge');
+      svg.appendChild(line);
+    }
+
+    // nodes
+    for(const s of sets){
+      const p = pos.get(key(s));
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('class', `node lvl-${p.level}`);
+      g.setAttribute('data-key', key(p.set));
+      g.setAttribute('transform', `translate(${p.x},${p.y})`);
+      const r = Math.max(12, 18 - p.level*1.2);
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('r', r);
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.textContent = label(p.set);
+      t.setAttribute('style','fill:#eaf2ff;font-size:15px;font-weight:600;font-family:ui-monospace,monospace;dominant-baseline:middle;text-anchor:middle;pointer-events:none;');
+      g.appendChild(c); g.appendChild(t);
+
+      // hover
+      g.addEventListener('mouseenter', ()=>{
+        for(const ln of svg.querySelectorAll('line.edge')){
+          ln.classList.remove('hover');
+          const [x1,y1,x2,y2] = ['x1','y1','x2','y2'].map(a=>+ln.getAttribute(a));
+          if((Math.abs(x1-p.x)<0.5 && Math.abs(y1-p.y)<0.5) || (Math.abs(x2-p.x)<0.5 && Math.abs(y2-p.y)<0.5))
+            ln.classList.add('hover');
+        }
+        c.setAttribute('r', r*1.3);
+      });
+      g.addEventListener('mouseleave', ()=>{
+        for(const ln of svg.querySelectorAll('line.edge')) ln.classList.remove('hover');
+        c.setAttribute('r', r);
+      });
+
+      // click selection intelligente
+      g.addEventListener('click', e=>{
+        e.stopPropagation();
+        clearSelection();
+        highlightByCommonElements(p.set);
+      });
+
+      svg.appendChild(g);
+    }
+
+    fitViewBox(svg);
+  }
+
+  function fitViewBox(svg) {
+    const bbox = svg.getBBox();
+    svg.setAttribute("viewBox", [
+      bbox.x - 100, bbox.y - 100, bbox.width + 200, bbox.height + 200
+    ].join(" "));
+    viewBox = {x:bbox.x-100,y:bbox.y-100,w:bbox.width+200,h:bbox.height+200};
+  }
+
+  // zoom & pan
+  let isPanning=false,start={x:0,y:0},viewBox={x:0,y:0,w:1400,h:900};
+  svg.addEventListener('mousedown', e=>{isPanning=true;start={x:e.clientX,y:e.clientY};});
+  svg.addEventListener('mouseup', ()=>isPanning=false);
+  svg.addEventListener('mouseleave', ()=>isPanning=false);
+  svg.addEventListener('mousemove', e=>{
+    if(!isPanning)return;
+    const dx=(e.clientX-start.x)*(viewBox.w/svg.clientWidth);
+    const dy=(e.clientY-start.y)*(viewBox.h/svg.clientHeight);
+    viewBox.x-=dx; viewBox.y-=dy;
+    svg.setAttribute('viewBox',`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+    start={x:e.clientX,y:e.clientY};
+  });
+  svg.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const scale=e.deltaY>0?1.1:0.9;
+    viewBox.w*=scale; viewBox.h*=scale;
+    svg.setAttribute('viewBox',`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+  });
+  svg.addEventListener('click', clearSelection);
+
+  function clearSelection(){
+    for(const n of svg.querySelectorAll('.node')) n.classList.remove('selected');
+    for(const e of svg.querySelectorAll('.edge')) e.classList.remove('selected');
+  }
+
+  // 🔶 nouvelle logique de sélection intelligente
+function highlightByCommonElements(selectedSet){
+  const currentKey = key(selectedSet);
+  const selectedKeys = new Set([currentKey]);
+  const parentKeys = new Set();
+  const childKeys = new Set();
+
+  const currentInfo = adjacency.get(currentKey);
+  if (!currentInfo) return;
+
+  // --- 1️⃣ Ajouter récursivement tous les parents (jusqu'à la racine) ---
+  function addParentsRecursively(k){
+    const info = adjacency.get(k);
+    if(!info) return;
+    for(const parent of info.parents){
+      if(!selectedKeys.has(parent)){
+        selectedKeys.add(parent);
+        parentKeys.add(parent);
+        addParentsRecursively(parent); // monte récursivement
+      }
+    }
+  }
+  addParentsRecursively(currentKey);
+
+  // --- 2️⃣ Ajouter récursivement tous les enfants (descendants) ---
+  function addChildrenRecursively(k){
+    const info = adjacency.get(k);
+    if(!info) return;
+    for(const child of info.children){
+      if(!selectedKeys.has(child)){
+        selectedKeys.add(child);
+        childKeys.add(child);
+        addChildrenRecursively(child); // descend récursivement
+      }
+    }
+  }
+  addChildrenRecursively(currentKey);
+
+  // --- 3️⃣ Réinitialiser styles ---
+  for(const n of svg.querySelectorAll('.node')) n.classList.remove('selected','parent','child');
+  for(const e of svg.querySelectorAll('.edge')) e.classList.remove('selected','parent-edge','child-edge');
+
+  // --- 4️⃣ Surligner les nœuds ---
+  for(const k of selectedKeys){
+    const g = svg.querySelector(`.node[data-key="${k}"]`);
+    if(!g) continue;
+    if(k === currentKey){
+      g.classList.add('selected'); // nœud principal
+    } else if(parentKeys.has(k)){
+      g.classList.add('parent');
+    } else if(childKeys.has(k)){
+      g.classList.add('child');
+    }
+  }
+
+  // --- 5️⃣ Surligner les arêtes ---
+  for(const e of svg.querySelectorAll('.edge')){
+    const f = e.getAttribute('data-from'), t = e.getAttribute('data-to');
+    if(selectedKeys.has(f) && selectedKeys.has(t)){
+      if(parentKeys.has(f) && selectedKeys.has(t))
+        e.classList.add('parent-edge');
+      else if(childKeys.has(t) && selectedKeys.has(f))
+        e.classList.add('child-edge');
+      else
+        e.classList.add('selected');
+    }
+  }
+}
+
+  // renvoie tous les sous-ensembles de taille 1 et 2
+  function getSubsets(set){
+    const res=[];
+    for(let i=0;i<set.length;i++) res.push([set[i]]);
+    for(let i=0;i<set.length;i++)
+      for(let j=i+1;j<set.length;j++)
+        res.push([set[i],set[j]]);
+    return res;
+  }
+
+  const datasetEl=document.getElementById('dataset');
+  document.getElementById('btnSample')?.addEventListener('click', ()=>{
+    datasetEl.value=`100: 1 3 4
+200: 2 3 5
+300: 1 2 3 5
+400: 2 5`;
+    build();
+  });
+  document.getElementById('btnBuild')?.addEventListener('click', build);
+
+  function build(){
+    const {items}=parseDataset(datasetEl.value);
+    if(items.length===0){alert('Dataset invalide');return;}
+    const sets=combinations(items);
+    renderLattice(sets);
+    renderItems(items);
+  }
+function renderItems(items){
+  const wrap = document.getElementById('items');
+  wrap.innerHTML = '';
+
+  // 🟦 Affichage des items détectés
+  const title = document.createElement('h4');
+  title.textContent = 'Items détectés :';
+  title.style.marginBottom = '8px';
+  wrap.appendChild(title);
+
+  const list = document.createElement('div');
+  list.style.display = 'flex';
+  list.style.flexWrap = 'wrap';
+  list.style.gap = '8px';
+  for (const it of items) {
+    const el = document.createElement('div');
+    el.className = 'tag';
+    el.textContent = `{${it}}`;
+    el.style.padding = '4px 8px';
+    el.style.background = '#1a2b4c';
+    el.style.borderRadius = '6px';
+    el.style.color = '#eaf2ff';
+    el.style.fontWeight = '600';
+    list.appendChild(el);
+  }
+  wrap.appendChild(list);
+
+  // 🧠 Calcul du nombre total d’itemsets
+  const d = items.length;
+  const total = Math.pow(2, d) - 1;
+
+  const formula = document.createElement('div');
+  formula.style.marginTop = '12px';
+  formula.style.fontSize = '14px';
+  formula.style.color = '#9fb8ff';
+  formula.innerHTML = `
+    <hr style="border:0;border-top:1px solid #223;">
+    <div><b>d</b> = ${d} items distincts</div>
+    <div style="margin-top:4px;">
+      <b>Nombre total d’itemsets</b> = <br> 
+      Σ<sub>k=1</sub><sup>${d}</sup> C(${d},k) = 2<sup>${d}</sup> − 1 = 
+      <span style="color:#ffb347;font-weight:600;">${total} Règles <br> </span>
+      <span style="color:#ffb347;font-weight:600;">Sans compter l'ensemble vide car On a -1 </span>
+    </div>
+  `;
+  wrap.appendChild(formula);
+}
+  build();
+</script>
+</body>
+</html>
