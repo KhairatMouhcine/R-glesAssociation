@@ -5,6 +5,68 @@
   <title>Algorithme Apriori — Treillis complet des itemsets</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+#apriori-container {
+  margin-top: 30px;
+  background: #0d162a;
+  padding: 20px;
+  border-radius: 12px;
+  color: #eaf2ff;
+}
+.support-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+#minSupport {
+  width: 70px;
+  padding: 4px 8px;
+  background: #19253f;
+  border: 1px solid #335;
+  color: #fff;
+  border-radius: 6px;
+}
+#apriori-steps table {
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  width: 100%;
+}
+#apriori-steps th, #apriori-steps td {
+  border: 1px solid #334;
+  padding: 4px 8px;
+  text-align: center;
+}
+#apriori-steps th {
+  background: #1f2d4d;
+  color: #ffcc80;
+}
+.node.valid circle {
+  stroke: #00e676; /* vert */
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 6px #00e676aa);
+}
+.node.invalid circle {
+  stroke: #ff1744; /* rouge */
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 6px #ff1744aa);
+  opacity: 0.6;
+}
+.edge.invalid-edge {
+  stroke: #ff1744;
+  stroke-width: 1.8px;
+  opacity: 0.5;
+}
+
+.edge {
+  stroke: #99a;
+  stroke-width: 1px;
+  opacity: 0.4;
+  transition: all 0.5s ease;
+}
+.node circle {
+  transition: all 0.5s ease;
+}
+
     :root{
       --bg:#0b1020;
       --card:#121a33;
@@ -165,6 +227,17 @@
   </div>
 
 
+<!-- 2eme partie -->
+ 
+<div id="apriori-container" class="panel">
+  <h3>🔍 Calcul du support — Algorithme Apriori</h3>
+  <div class="support-input">
+    <label for="minSupport">min_support = </label>
+    <input type="number" id="minSupport" min="1" value="2" />
+    <button id="btnSupport">Calculer les niveaux L<sub>k</sub></button>
+  </div>
+  <div id="apriori-steps"></div>
+</div>
   
 
 <script>
@@ -264,6 +337,8 @@
       line.setAttribute('data-from', fromK);
       line.setAttribute('data-to', toK);
       line.setAttribute('class','edge');
+      line.setAttribute('data-from', fromK);
+      line.setAttribute('data-to', toK);
       svg.appendChild(line);
     }
 
@@ -481,13 +556,185 @@ function renderItems(items){
     <div style="margin-top:4px;">
       <b>Nombre total d’itemsets</b> = <br> 
       Σ<sub>k=1</sub><sup>${d}</sup> C(${d},k) = 2<sup>${d}</sup> − 1 = 
-      <span style="color:#ffb347;font-weight:600;">${total} Règles <br> </span>
+      <span style="color:#ffb347;font-weight:600;">${total}  <br> </span>
       <span style="color:#ffb347;font-weight:600;">Sans compter l'ensemble vide car On a -1 </span>
     </div>
   `;
   wrap.appendChild(formula);
 }
-  build();
+
+
+document.getElementById('btnSupport')?.addEventListener('click', calculerSupport);
+
+function calculerSupport() {
+  const minSup = parseInt(document.getElementById('minSupport').value);
+  const {transactions, items} = parseDataset(datasetEl.value);
+  const allSets = combinations(items).filter(s => s.length > 0);
+
+  const container = document.getElementById('apriori-steps');
+  container.innerHTML = '';
+
+  let step = 1;
+  let Ck = allSets.filter(s => s.length === step);
+  let Lk = [];
+
+  while (Ck.length > 0) {
+    // Calcul du support
+    const supports = Ck.map(s => ({
+      itemset: s,
+      sup: transactions.filter(t => s.every(x => t.items.includes(x))).length
+    }));
+
+    // Affichage du tableau Ck
+    container.appendChild(renderTable(`C${step}`, supports));
+
+    // Filtrage selon min_support
+    Lk = supports.filter(o => o.sup >= minSup);
+
+    // Affichage du tableau Lk
+    if (Lk.length > 0)
+      container.appendChild(renderTable(`L${step}`, Lk, true));
+
+    // Génération des combinaisons suivantes
+    const nextItems = uniq(Lk.flatMap(o => o.itemset));
+    Ck = combinations(nextItems).filter(s => s.length === step + 1);
+    step++;
+  }
+}
+document.getElementById('btnSupport')?.addEventListener('click', calculerSupport);
+
+const stepColors = [
+  '#ffb703', // jaune
+  '#7b61ff', // violet
+  '#e91e63', // rose
+  '#00bcd4', // cyan
+  '#8bc34a', // vert
+  '#ff9800', // orange
+  '#9c27b0'  // mauve
+];
+
+function calculerSupport() {
+  const minSup = parseInt(document.getElementById('minSupport').value);
+  const {transactions, items} = parseDataset(datasetEl.value);
+  const allSets = combinations(items).filter(s => s.length > 0);
+
+  const container = document.getElementById('apriori-steps');
+  container.innerHTML = '';
+
+  let step = 1;
+  let Ck = allSets.filter(s => s.length === step);
+  let Lk = [];
+
+  while (Ck.length > 0) {
+    const color = stepColors[(step - 1) % stepColors.length];
+
+    const supports = Ck.map(s => ({
+      itemset: s,
+      sup: transactions.filter(t => s.every(x => t.items.includes(x))).length
+    }));
+
+    // --- Afficher Ck ---
+    container.appendChild(renderTableWithStepColor(`C${step}`, supports, minSup, color));
+
+    const valid = supports.filter(o => o.sup >= minSup);
+    const invalid = supports.filter(o => o.sup < minSup);
+
+    // --- Colorer dans le graphe (étape) ---
+    highlightSetsStepColor(invalid, color);
+
+    // --- Afficher Lk ---
+    if (valid.length > 0)
+      container.appendChild(renderTableWithStepColor(`L${step}`, valid, minSup, color, true));
+
+    const nextItems = uniq(valid.flatMap(o => o.itemset));
+    Ck = combinations(nextItems).filter(s => s.length === step + 1);
+    step++;
+  }
+}
+
+function renderTableWithStepColor(label, data, minSup, color, highlight=false) {
+  const table = document.createElement('table');
+  const title = document.createElement('h4');
+  title.innerHTML = `${label}`;
+  title.style.color = color;
+  table.innerHTML = `
+    <tr><th>itemset</th><th>sup.</th></tr>
+    ${data.map(d=>`<tr style="background:${d.sup < minSup ? color+'33' : '#1c3f28'};">
+      <td>{${d.itemset.join(' ')}}</td>
+      <td>${d.sup}</td>
+    </tr>`).join('')}
+  `;
+  const wrapper = document.createElement('div');
+  wrapper.appendChild(title);
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
+function highlightSetsStepColor(list, color){
+  for(const o of list){
+    const k = key(o.itemset);
+    colorNodeAndDescendants(k, color);
+  }
+}
+
+function colorNodeAndDescendants(k, color){
+  const g = svg.querySelector(`.node[data-key="${k}"]`);
+  if(g){
+    const c = g.querySelector('circle');
+    if(c){
+      c.style.stroke = color;
+      c.style.strokeWidth = '3px';
+      c.style.filter = `drop-shadow(0 0 5px ${color}aa)`;
+      c.style.opacity = 0.9;
+    }
+  }
+  const info = adjacency.get(k);
+  if(!info) return;
+  for(const child of info.children){
+    colorNodeAndDescendants(child, color);
+  }
+}
+build();
+
+
+function highlightSetsStepColor(list, color){
+  for(const o of list){
+    const k = key(o.itemset);
+    colorNodeAndDescendants(k, color);
+  }
+}
+
+function colorNodeAndDescendants(k, color){
+  const g = svg.querySelector(`.node[data-key="${k}"]`);
+  if(g){
+    const c = g.querySelector('circle');
+    if(c){
+      c.style.stroke = color;
+      c.style.strokeWidth = '3px';
+      c.style.filter = `drop-shadow(0 0 5px ${color}aa)`;
+      c.style.opacity = 0.9;
+    }
+  }
+
+  // 🔹 Colorer les arêtes sortantes
+  for (const e of svg.querySelectorAll('.edge')) {
+    const f = e.getAttribute('data-from');
+    const t = e.getAttribute('data-to');
+    if (f === k) {
+      e.style.stroke = color;
+      e.style.strokeWidth = '2.2px';
+      e.style.opacity = 0.8;
+      e.style.filter = `drop-shadow(0 0 3px ${color}88)`;
+    }
+  }
+
+  // 🔹 Descendants récursifs
+  const info = adjacency.get(k);
+  if(!info) return;
+  for(const child of info.children){
+    colorNodeAndDescendants(child, color);
+  }
+}
 </script>
 </body>
 </html>
