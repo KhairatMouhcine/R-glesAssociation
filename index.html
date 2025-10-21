@@ -5,6 +5,43 @@
   <title>Algorithme Apriori — Treillis complet des itemsets</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+#association-container {
+  background: #0d162a;
+  margin-top: 30px;
+  padding: 20px;
+  border-radius: 12px;
+  color: #eaf2ff;
+}
+#rules-table table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+#rules-table th, #rules-table td {
+  border: 1px solid #334;
+  padding: 5px 10px;
+  text-align: center;
+}
+#rules-table th {
+  background: #1f2d4d;
+  color: #ffcc80;
+}
+#final-summary {
+  margin-top: 25px;
+  padding: 15px;
+  background: #162135;
+  border-left: 4px solid #00e676;
+  border-radius: 8px;
+  color: #eaf2ff;
+}
+#final-summary h3 {
+  color: #00e676;
+  margin-bottom: 10px;
+}
+
+
+
+
 #apriori-container {
   margin-top: 30px;
   background: #0d162a;
@@ -238,25 +275,51 @@
   </div>
   <div id="apriori-steps"></div>
 </div>
+
+<!-- 3eme partie -->
+<div id="association-container" class="panel">
+  <h3>🧠 Règles d’association</h3>
+  <div id="rules-summary"></div>
+  <div id="rules-table"></div>
+</div>
+
+<button id="btnRules">Générer les règles</button>
   
 
 <script>
-  const uniq = arr => [...new Set(arr)];
-  const byNum = (a,b)=>a-b;
-  function parseDataset(text){
-    const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-    const transactions = [];
-    for(const line of lines){
-      const m = line.match(/^\s*([^:]+)\s*:\s*(.+)$/);
-      if(!m) continue;
-      const tid = m[1].trim();
-      const items = m[2].trim().split(/\s+/).map(Number).filter(n=>!Number.isNaN(n));
-      transactions.push({tid, items: uniq(items).sort(byNum)});
-    }
-    const all = uniq(transactions.flatMap(t=>t.items)).sort(byNum);
-    return {transactions, items: all};
-  }
 
+
+    document.getElementById('btnRules')?.addEventListener('click', calculerRegles);
+  const uniq = arr => [...new Set(arr)];
+  // 🔁 au lieu de byNum:
+const bySym = (a, b) => {
+  const na = Number(a), nb = Number(b);
+  const aIsNum = !Number.isNaN(na), bIsNum = !Number.isNaN(nb);
+  if (aIsNum && bIsNum) return na - nb;           // 1,2,3...
+  return String(a).localeCompare(String(b), 'fr'); // A,B,C...
+};
+
+// 🔁 remplace parseDataset par :
+function parseDataset(text){
+  const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  const transactions = [];
+  for(const line of lines){
+    const m = line.match(/^\s*([^:]+)\s*:\s*(.+)$/);
+    if(!m) continue;
+    const tid = m[1].trim();
+    // accepte A B C, ou 1 2 3, ou mixte — séparés par espaces/virgules
+    const items = m[2]
+      .trim()
+      .split(/[,\s]+/)
+      .map(tok => tok.replace(/[^\w-]/g,'').toUpperCase()) // “a”→“A”, enlève ponctuation
+      .filter(Boolean);
+    // unique + tri naturel (nombres ou lettres)
+    const uniq = arr => [...new Set(arr)];
+    transactions.push({tid, items: uniq(items).sort(bySym)});
+  }
+  const all = [...new Set(transactions.flatMap(t=>t.items))].sort(bySym);
+  return {transactions, items: all};
+}
   function combinations(items){
     const res = [[]];
     for(const x of items){
@@ -564,70 +627,34 @@ function renderItems(items){
 }
 
 
+let dernierItemsetFrequent = null;
 document.getElementById('btnSupport')?.addEventListener('click', calculerSupport);
-
+// 🔹 remplace l'ancienne variable dernierItemsetFrequent
+let dernierNiveauFrequent = []; // [{itemset: [...], sup: n}, ...]
+let kMax = 0;                   // taille des itemsets de Lk final
 function calculerSupport() {
+  console.log("---- Début calculerSupport ----");
+
   const minSup = parseInt(document.getElementById('minSupport').value);
-  const {transactions, items} = parseDataset(datasetEl.value);
+  const { transactions, items } = parseDataset(datasetEl.value);
   const allSets = combinations(items).filter(s => s.length > 0);
 
   const container = document.getElementById('apriori-steps');
   container.innerHTML = '';
 
-  let step = 1;
-  let Ck = allSets.filter(s => s.length === step);
-  let Lk = [];
-
-  while (Ck.length > 0) {
-    // Calcul du support
-    const supports = Ck.map(s => ({
-      itemset: s,
-      sup: transactions.filter(t => s.every(x => t.items.includes(x))).length
-    }));
-
-    // Affichage du tableau Ck
-    container.appendChild(renderTable(`C${step}`, supports));
-
-    // Filtrage selon min_support
-    Lk = supports.filter(o => o.sup >= minSup);
-
-    // Affichage du tableau Lk
-    if (Lk.length > 0)
-      container.appendChild(renderTable(`L${step}`, Lk, true));
-
-    // Génération des combinaisons suivantes
-    const nextItems = uniq(Lk.flatMap(o => o.itemset));
-    Ck = combinations(nextItems).filter(s => s.length === step + 1);
-    step++;
-  }
-}
-document.getElementById('btnSupport')?.addEventListener('click', calculerSupport);
-
-const stepColors = [
-  '#ffb703', // jaune
-  '#7b61ff', // violet
-  '#e91e63', // rose
-  '#00bcd4', // cyan
-  '#8bc34a', // vert
-  '#ff9800', // orange
-  '#9c27b0'  // mauve
-];
-
-function calculerSupport() {
-  const minSup = parseInt(document.getElementById('minSupport').value);
-  const {transactions, items} = parseDataset(datasetEl.value);
-  const allSets = combinations(items).filter(s => s.length > 0);
-
-  const container = document.getElementById('apriori-steps');
-  container.innerHTML = '';
+  // 🔹 Reset visuel
+  for (const n of svg.querySelectorAll('.node')) n.classList.remove('invalid','valid');
+  for (const e of svg.querySelectorAll('.edge')) e.classList.remove('invalid-edge');
 
   let step = 1;
   let Ck = allSets.filter(s => s.length === step);
   let Lk = [];
+  let dernierValide = []; // ✅ garde le dernier niveau fréquent non vide
 
   while (Ck.length > 0) {
     const color = stepColors[(step - 1) % stepColors.length];
 
+    // 🔹 Calcul des supports
     const supports = Ck.map(s => ({
       itemset: s,
       sup: transactions.filter(t => s.every(x => t.items.includes(x))).length
@@ -639,18 +666,80 @@ function calculerSupport() {
     const valid = supports.filter(o => o.sup >= minSup);
     const invalid = supports.filter(o => o.sup < minSup);
 
-    // --- Colorer dans le graphe (étape) ---
     highlightSetsStepColor(invalid, color);
 
     // --- Afficher Lk ---
-    if (valid.length > 0)
+    if (valid.length > 0) {
       container.appendChild(renderTableWithStepColor(`L${step}`, valid, minSup, color, true));
+      dernierValide = valid; // ✅ sauvegarde le dernier Lk non vide
+    }
 
+    // 🔹 Prépare C(k+1)
     const nextItems = uniq(valid.flatMap(o => o.itemset));
-    Ck = combinations(nextItems).filter(s => s.length === step + 1);
+    const next = combinations(nextItems).filter(s => s.length === step + 1);
+
+    if (next.length === 0) break; // ✅ stop si plus de combinaisons
+
+    Ck = next;
+    Lk = valid;
     step++;
   }
+
+  // 🔹 Résumé final
+  if (dernierValide.length > 0) {
+    dernierNiveauFrequent = dernierValide.slice();
+    kMax = dernierValide[0].itemset.length;
+
+    const totalTrans = transactions.length;
+    const summaryLines = dernierValide.map(o => {
+      const supportAbsolu = o.sup;
+      const supportRelatif = (o.sup / totalTrans).toFixed(2);
+      return `<div>• {${o.itemset.join(' ')}} → sup = ${supportAbsolu} (${supportRelatif})</div>`;
+    }).join('');
+
+    const chips = dernierValide.map(o => `{${o.itemset.join(' ')}}`).join(', ');
+    const summaryDiv = document.createElement('div');
+    summaryDiv.id = 'final-summary';
+    summaryDiv.innerHTML = `
+      <h3>🧩 Résultat final Apriori</h3>
+      <p><b>L<sub>${kMax}</sub> fréquent (${dernierValide.length} itemset${dernierValide.length>1?'s':''}) :</b> ${chips}</p>
+      <div style="margin-top:8px; font-size:14px; color:#9fb8ff;">${summaryLines}</div>
+      <p style="margin-top:10px;">📊 <b>Total transactions :</b> ${totalTrans}</p>
+    `;
+    document.getElementById('apriori-steps').appendChild(summaryDiv);
+
+    console.log("✅ Dernier niveau fréquent :", dernierNiveauFrequent);
+    console.log("✅ Taille du dernier niveau (kMax) :", kMax);
+  } else {
+    dernierNiveauFrequent = [];
+    kMax = 0;
+    console.warn("⚠️ Aucun niveau fréquent trouvé (Lk vide). Lance d'abord le calcul du support (Apriori).");
+
+    const warnDiv = document.createElement('div');
+    warnDiv.id = 'final-summary';
+    warnDiv.style.background = '#3b1a1a';
+    warnDiv.style.color = '#ffaaaa';
+    warnDiv.style.padding = '10px';
+    warnDiv.style.borderRadius = '6px';
+    warnDiv.innerHTML = `
+      ⚠️ <b>Aucun dernier niveau fréquent</b>.<br>
+      Lance d’abord le calcul du support (Apriori).
+    `;
+    document.getElementById('apriori-steps').appendChild(warnDiv);
+  }
 }
+console.log("Dernier itemset fréquent :", dernierItemsetFrequent);
+console.log("Dernier itemset global :", dernierItemsetFrequent);
+const stepColors = [
+  '#ffb703', // jaune
+  '#7b61ff', // violet
+  '#e91e63', // rose
+  '#00bcd4', // cyan
+  '#8bc34a', // vert
+  '#ff9800', // orange
+  '#9c27b0'  // mauve
+];
+
 
 function renderTableWithStepColor(label, data, minSup, color, highlight=false) {
   const table = document.createElement('table');
@@ -694,7 +783,7 @@ function colorNodeAndDescendants(k, color){
     colorNodeAndDescendants(child, color);
   }
 }
-build();
+
 
 
 function highlightSetsStepColor(list, color){
@@ -735,6 +824,100 @@ function colorNodeAndDescendants(k, color){
     colorNodeAndDescendants(child, color);
   }
 }
+function calculerRegles() {
+  const { transactions } = parseDataset(datasetEl.value);
+  const minSup = parseInt(document.getElementById('minSupport').value, 10) || 2;
+
+  if (!dernierNiveauFrequent.length) {
+    alert("⚠️ Aucun dernier niveau fréquent. Lance d'abord le calcul du support (Apriori).");
+    return;
+  }
+
+  const d = kMax;                                   // d = taille du dernier niveau
+  const R = Math.pow(3, d) - Math.pow(2, d + 1) + 1;
+
+  // 🔹 Générer des règles pour CHAQUE itemset du dernier Lk
+  const rules = [];
+  for (const { itemset, sup } of dernierNiveauFrequent) {
+    const subsets = allNonEmptyProperSubsets(itemset);   // tous X non vides et ≠ itemset
+    const supXY = sup / transactions.length;             // support du set complet (X∪Y = itemset)
+
+    for (const X of subsets) {
+      const Y = itemset.filter(v => !X.includes(v));
+      if (Y.length === 0) continue;
+
+      const supX = transactions.filter(t => X.every(x => t.items.includes(x))).length / transactions.length;
+      const supY = transactions.filter(t => Y.every(y => t.items.includes(y))).length / transactions.length;
+
+      const conf = supXY / supX;
+      const lift = conf / supY; // amélioration
+
+      rules.push({
+        source: itemset.join(' '),        // pour savoir de quel Lk vient la règle
+        X, Y,
+        support: supXY.toFixed(2),
+        confiance: conf.toFixed(2),
+        freqY: supY.toFixed(2),
+        amelioration: lift.toFixed(2)
+      });
+    }
+  }
+
+  // meilleure règle (optionnel)
+  const best = rules.reduce((a,b)=> (+b.amelioration > +a.amelioration ? b : a), rules[0]);
+
+  // --- Résumé
+  const chips = dernierNiveauFrequent.map(o => `{${o.itemset.join(' ')}}`).join(' , ');
+  const summary = `
+    <h3>🧠 Règles d’association</h3>
+    <p><b>d = ${d}</b> → taille du dernier itemset fréquent.</p>
+    <p><b>R = 3<sup>${d}</sup> - 2<sup>${d+1}</sup> + 1 = ${R}</b> règles possibles (théorique pour d).</p>
+    <p><b>L<sub>${d}</sub> fréquent :</b> ${chips}</p>
+    <p><b>Min Support :</b> ${minSup}</p>
+    <p><b>Règles générées :</b> ${rules.length}</p>
+  `;
+  document.getElementById('rules-summary').innerHTML = summary;
+
+  // --- Tableau
+  const tableHTML = `
+    <table>
+      <tr>
+        <th>#</th>
+        <th>Itemset source (L${d})</th>
+        <th>Règle</th>
+        <th>Support (s)</th>
+        <th>Confiance (α)</th>
+        <th>Fréq(Y)</th>
+        <th>Amélioration</th>
+      </tr>
+      ${rules.map((r,i)=>`
+        <tr ${r===best ? 'style="background:#1b2e1a;color:#b5ffb5;font-weight:600;"':''}>
+          <td>${i+1}</td>
+          <td>{${r.source}}</td>
+          <td>{${r.X.join(' ')}} ⇒ {${r.Y.join(' ')}}</td>
+          <td>${r.support}</td>
+          <td>${r.confiance}</td>
+          <td>${r.freqY}</td>
+          <td>${r.amelioration}</td>
+        </tr>
+      `).join('')}
+    </table>
+  `;
+  document.getElementById('rules-table').innerHTML = tableHTML;
+}
+function allNonEmptyProperSubsets(arr) {
+  const res = [];
+  const n = arr.length;
+  for (let i = 1; i < (1 << n) - 1; i++) {
+    const subset = [];
+    for (let j = 0; j < n; j++) {
+      if (i & (1 << j)) subset.push(arr[j]);
+    }
+    res.push(subset);
+  }
+  return res;
+}
+build();
 </script>
 </body>
 </html>
