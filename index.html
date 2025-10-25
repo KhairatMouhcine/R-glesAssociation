@@ -632,35 +632,63 @@ document.getElementById('btnSupport')?.addEventListener('click', calculerSupport
 // 🔹 remplace l'ancienne variable dernierItemsetFrequent
 let dernierNiveauFrequent = []; // [{itemset: [...], sup: n}, ...]
 let kMax = 0;                   // taille des itemsets de Lk final
-function calculerSupport() {
-  console.log("---- Début calculerSupport ----");
 
+
+function calculerSupport() {
+  console.log("---- Début calculerSupport (Apriori optimisé avec maxK) ----");
+
+  // --- 🔹 Ajout DOM automatique pour le champ maxK ---
+  let maxKInput = document.getElementById('maxK');
+  if (!maxKInput) {
+    const label = document.createElement('label');
+    label.textContent = "Nombre max d’éléments (maxK): ";
+    label.style.marginLeft = "12px";
+
+    maxKInput = document.createElement('input');
+    maxKInput.type = "number";
+    maxKInput.id = "maxK";
+    maxKInput.value = 3; // valeur par défaut
+    maxKInput.min = 1;
+    maxKInput.style.width = "60px";
+    maxKInput.style.marginLeft = "4px";
+
+    const minSupEl = document.getElementById('minSupport');
+    if (minSupEl && minSupEl.parentNode) {
+      minSupEl.parentNode.insertBefore(label, minSupEl.nextSibling);
+      minSupEl.parentNode.insertBefore(maxKInput, label.nextSibling);
+    } else {
+      document.body.prepend(label, maxKInput);
+    }
+  }
+
+  // --- 🔹 Récupération des paramètres ---
   const minSup = parseInt(document.getElementById('minSupport').value);
+  const maxK = parseInt(document.getElementById('maxK').value);
   const { transactions, items } = parseDataset(datasetEl.value);
   const allSets = combinations(items).filter(s => s.length > 0);
 
   const container = document.getElementById('apriori-steps');
   container.innerHTML = '';
 
-  // 🔹 Reset visuel
+  // --- 🔹 Reset visuel ---
   for (const n of svg.querySelectorAll('.node')) n.classList.remove('invalid','valid');
   for (const e of svg.querySelectorAll('.edge')) e.classList.remove('invalid-edge');
 
   let step = 1;
   let Ck = allSets.filter(s => s.length === step);
   let Lk = [];
-  let dernierValide = []; // ✅ garde le dernier niveau fréquent non vide
+  let dernierValide = [];
 
-  while (Ck.length > 0) {
+  // --- 🔁 Boucle principale ---
+  while (Ck.length > 0 && step <= maxK) {
     const color = stepColors[(step - 1) % stepColors.length];
 
-    // 🔹 Calcul des supports
+    // 🔹 Calcul du support
     const supports = Ck.map(s => ({
       itemset: s,
       sup: transactions.filter(t => s.every(x => t.items.includes(x))).length
     }));
 
-    // --- Afficher Ck ---
     container.appendChild(renderTableWithStepColor(`C${step}`, supports, minSup, color));
 
     const valid = supports.filter(o => o.sup >= minSup);
@@ -668,24 +696,42 @@ function calculerSupport() {
 
     highlightSetsStepColor(invalid, color);
 
-    // --- Afficher Lk ---
     if (valid.length > 0) {
       container.appendChild(renderTableWithStepColor(`L${step}`, valid, minSup, color, true));
-      dernierValide = valid; // ✅ sauvegarde le dernier Lk non vide
+      dernierValide = valid;
     }
 
-    // 🔹 Prépare C(k+1)
-    const nextItems = uniq(valid.flatMap(o => o.itemset));
-    const next = combinations(nextItems).filter(s => s.length === step + 1);
+    // --- Arrêt si maxK atteint ---
+    if (step >= maxK) {
+      console.log(`🛑 Arrêt : taille maximale ${maxK} atteinte.`);
+      break;
+    }
 
-    if (next.length === 0) break; // ✅ stop si plus de combinaisons
+    // 🔹 Génération des candidats C(k+1)
+    const nextItems = uniq(valid.flatMap(o => o.itemset));
+    let next = combinations(nextItems).filter(s => s.length === step + 1);
+
+    // ⚙️ Pruning intégré
+    next = next.filter(candidate => {
+      for (let i = 0; i < candidate.length; i++) {
+        const subset = candidate.slice(0, i).concat(candidate.slice(i + 1));
+        const isFrequent = valid.some(v =>
+          v.itemset.length === subset.length &&
+          subset.every(x => v.itemset.includes(x))
+        );
+        if (!isFrequent) return false;
+      }
+      return true;
+    });
+
+    if (next.length === 0) break;
 
     Ck = next;
     Lk = valid;
     step++;
   }
 
-  // 🔹 Résumé final
+  // --- 🔹 Résumé final ---
   if (dernierValide.length > 0) {
     dernierNiveauFrequent = dernierValide.slice();
     kMax = dernierValide[0].itemset.length;
@@ -705,15 +751,16 @@ function calculerSupport() {
       <p><b>L<sub>${kMax}</sub> fréquent (${dernierValide.length} itemset${dernierValide.length>1?'s':''}) :</b> ${chips}</p>
       <div style="margin-top:8px; font-size:14px; color:#9fb8ff;">${summaryLines}</div>
       <p style="margin-top:10px;">📊 <b>Total transactions :</b> ${totalTrans}</p>
+      <p style="margin-top:6px; color:#aaa;">🔒 Limite maxK = ${maxK}</p>
     `;
-    document.getElementById('apriori-steps').appendChild(summaryDiv);
+    container.appendChild(summaryDiv);
 
     console.log("✅ Dernier niveau fréquent :", dernierNiveauFrequent);
     console.log("✅ Taille du dernier niveau (kMax) :", kMax);
   } else {
     dernierNiveauFrequent = [];
     kMax = 0;
-    console.warn("⚠️ Aucun niveau fréquent trouvé (Lk vide). Lance d'abord le calcul du support (Apriori).");
+    console.warn("⚠️ Aucun niveau fréquent trouvé (Lk vide).");
 
     const warnDiv = document.createElement('div');
     warnDiv.id = 'final-summary';
@@ -725,8 +772,10 @@ function calculerSupport() {
       ⚠️ <b>Aucun dernier niveau fréquent</b>.<br>
       Lance d’abord le calcul du support (Apriori).
     `;
-    document.getElementById('apriori-steps').appendChild(warnDiv);
+    container.appendChild(warnDiv);
   }
+
+  console.log("---- Fin calculerSupport ----");
 }
 console.log("Dernier itemset fréquent :", dernierItemsetFrequent);
 console.log("Dernier itemset global :", dernierItemsetFrequent);
