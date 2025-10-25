@@ -1,5 +1,5 @@
 # 🌟 Algorithme Apriori — Visualisation interactive du Treillis complet des itemsets  
-👨‍💻 *Développé par [Khairat Mouhcine](https://github.com/mekurombo)*  
+👨‍💻 *Développé par [Khairat Mouhcine](https://github.com/mekorombo)*  
 
 [![Made with JavaScript](https://img.shields.io/badge/Made%20with-JavaScript-yellow?style=for-the-badge&logo=javascript)](https://developer.mozilla.org/fr/docs/Web/JavaScript)
 [![HTML5](https://img.shields.io/badge/HTML5-orange?style=for-the-badge&logo=html5)](https://developer.mozilla.org/fr/docs/Web/Guide/HTML/HTML5)
