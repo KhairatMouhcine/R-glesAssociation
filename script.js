@@ -344,6 +344,31 @@ document.getElementById('btnSupport')?.addEventListener('click', calculerSupport
 let dernierNiveauFrequent = []; // [{itemset: [...], sup: n}, ...]
 let kMax = 0;                   // taille des itemsets de Lk final
 
+// 🧩 Normalisation des ensembles (corrige les ordres {B D C} vs {B C D})
+function normalizeSet(arr) {
+  return [...arr].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+function key(arr) {
+  return normalizeSet(arr).join('-');
+}
+
+// 💚 Coloration directe des derniers itemsets fréquents (sans descente récursive)
+function colorFinalFrequentNodes(list) {
+  for (const o of list) {
+    const nodeKey = key(normalizeSet(o.itemset));
+    const g = svg.querySelector(`.node[data-key="${nodeKey}"]`);
+    if (g) {
+      const c = g.querySelector('circle');
+      if (c) {
+        c.style.stroke = '#00e676';
+        c.style.strokeWidth = '3px';
+        c.style.filter = 'drop-shadow(0 0 8px #00e676cc)';
+        c.style.opacity = '1';
+      }
+    }
+  }
+}
 
 function calculerSupport() {
   console.log("---- Début calculerSupport (Apriori optimisé avec maxK) ----");
@@ -354,6 +379,7 @@ function calculerSupport() {
     const label = document.createElement('label');
     label.textContent = "Nombre max d’éléments (maxK): ";
     label.style.marginLeft = "12px";
+    label.style.color = "#eaf2ff";
 
     maxKInput = document.createElement('input');
     maxKInput.type = "number";
@@ -362,6 +388,10 @@ function calculerSupport() {
     maxKInput.min = 1;
     maxKInput.style.width = "60px";
     maxKInput.style.marginLeft = "4px";
+    maxKInput.style.background = "#19253f";
+    maxKInput.style.border = "1px solid #335";
+    maxKInput.style.color = "#fff";
+    maxKInput.style.borderRadius = "6px";
 
     const minSupEl = document.getElementById('minSupport');
     if (minSupEl && minSupEl.parentNode) {
@@ -376,13 +406,14 @@ function calculerSupport() {
   const minSup = parseInt(document.getElementById('minSupport').value);
   const maxK = parseInt(document.getElementById('maxK').value);
   const { transactions, items } = parseDataset(datasetEl.value);
+  const totalTrans = transactions.length;
   const allSets = combinations(items).filter(s => s.length > 0);
 
   const container = document.getElementById('apriori-steps');
   container.innerHTML = '';
 
   // --- 🔹 Reset visuel ---
-  for (const n of svg.querySelectorAll('.node')) n.classList.remove('invalid','valid');
+  for (const n of svg.querySelectorAll('.node')) n.classList.remove('invalid', 'valid');
   for (const e of svg.querySelectorAll('.edge')) e.classList.remove('invalid-edge');
 
   let step = 1;
@@ -395,11 +426,13 @@ function calculerSupport() {
     const color = stepColors[(step - 1) % stepColors.length];
 
     // 🔹 Calcul du support
-    const supports = Ck.map(s => ({
-      itemset: s,
-      sup: transactions.filter(t => s.every(x => t.items.includes(x))).length
-    }));
+    const supports = Ck.map(s => {
+      const supAbs = transactions.filter(t => s.every(x => t.items.includes(x))).length;
+      const supRel = (supAbs / totalTrans).toFixed(2);
+      return { itemset: s, sup: supAbs, supRel };
+    });
 
+    // --- Afficher Ck ---
     container.appendChild(renderTableWithStepColor(`C${step}`, supports, minSup, color));
 
     const valid = supports.filter(o => o.sup >= minSup);
@@ -407,6 +440,7 @@ function calculerSupport() {
 
     highlightSetsStepColor(invalid, color);
 
+    // --- Afficher Lk ---
     if (valid.length > 0) {
       container.appendChild(renderTableWithStepColor(`L${step}`, valid, minSup, color, true));
       dernierValide = valid;
@@ -422,7 +456,7 @@ function calculerSupport() {
     const nextItems = uniq(valid.flatMap(o => o.itemset));
     let next = combinations(nextItems).filter(s => s.length === step + 1);
 
-    // ⚙️ Pruning intégré
+    // ⚙️ Élagage (pruning)
     next = next.filter(candidate => {
       for (let i = 0; i < candidate.length; i++) {
         const subset = candidate.slice(0, i).concat(candidate.slice(i + 1));
@@ -438,7 +472,6 @@ function calculerSupport() {
     if (next.length === 0) break;
 
     Ck = next;
-    Lk = valid;
     step++;
   }
 
@@ -447,19 +480,16 @@ function calculerSupport() {
     dernierNiveauFrequent = dernierValide.slice();
     kMax = dernierValide[0].itemset.length;
 
-    const totalTrans = transactions.length;
-    const summaryLines = dernierValide.map(o => {
-      const supportAbsolu = o.sup;
-      const supportRelatif = (o.sup / totalTrans).toFixed(2);
-      return `<div>• {${o.itemset.join(' ')}} → sup = ${supportAbsolu} (${supportRelatif})</div>`;
-    }).join('');
+    const summaryLines = dernierValide.map(o => `
+      <div>• {${o.itemset.join(' ')}} → support = ${o.sup} / ${totalTrans} = ${(o.sup / totalTrans).toFixed(2)}</div>
+    `).join('');
 
     const chips = dernierValide.map(o => `{${o.itemset.join(' ')}}`).join(', ');
     const summaryDiv = document.createElement('div');
     summaryDiv.id = 'final-summary';
     summaryDiv.innerHTML = `
       <h3>🧩 Résultat final Apriori</h3>
-      <p><b>L<sub>${kMax}</sub> fréquent (${dernierValide.length} itemset${dernierValide.length>1?'s':''}) :</b> ${chips}</p>
+      <p><b>L<sub>${kMax}</sub> fréquent (${dernierValide.length} itemset${dernierValide.length > 1 ? 's' : ''}) :</b> ${chips}</p>
       <div style="margin-top:8px; font-size:14px; color:#9fb8ff;">${summaryLines}</div>
       <p style="margin-top:10px;">📊 <b>Total transactions :</b> ${totalTrans}</p>
       <p style="margin-top:6px; color:#aaa;">🔒 Limite maxK = ${maxK}</p>
@@ -468,7 +498,12 @@ function calculerSupport() {
 
     console.log("✅ Dernier niveau fréquent :", dernierNiveauFrequent);
     console.log("✅ Taille du dernier niveau (kMax) :", kMax);
+
+    // 💚 Coloration directe des derniers itemsets fréquents
+    colorFinalFrequentNodes(dernierNiveauFrequent);
+
   } else {
+    // --- Aucun itemset fréquent ---
     dernierNiveauFrequent = [];
     kMax = 0;
     console.warn("⚠️ Aucun niveau fréquent trouvé (Lk vide).");
@@ -488,6 +523,8 @@ function calculerSupport() {
 
   console.log("---- Fin calculerSupport ----");
 }
+
+
 console.log("Dernier itemset fréquent :", dernierItemsetFrequent);
 console.log("Dernier itemset global :", dernierItemsetFrequent);
 const stepColors = [
