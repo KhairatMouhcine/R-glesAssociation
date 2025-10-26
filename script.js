@@ -502,6 +502,8 @@ const stepColors = [
 
 
 function renderTableWithStepColor(label, data, minSup, color, highlight=false) {
+  const datasetEl=document.getElementById('dataset');
+  const { transactions } = parseDataset(datasetEl.value);
   const table = document.createElement('table');
   const title = document.createElement('h4');
   title.innerHTML = `${label}`;
@@ -510,7 +512,7 @@ function renderTableWithStepColor(label, data, minSup, color, highlight=false) {
     <tr><th>itemset</th><th>sup.</th></tr>
     ${data.map(d=>`<tr style="background:${d.sup < minSup ? color+'33' : '#1c3f28'};">
       <td>{${d.itemset.join(' ')}}</td>
-      <td>${d.sup}</td>
+      <td>${d.sup} / ${transactions.length} = ${(d.sup / transactions.length).toFixed(2)}</td>
     </tr>`).join('')}
   `;
   const wrapper = document.createElement('div');
